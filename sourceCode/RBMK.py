@@ -10,7 +10,7 @@ import time
 import random
 import pickle
 import ConfigParser
-from numba import vectorize, cuda
+import os
 
 class RBMK:
 	def __init__(self, configFile, typeRBM):
@@ -240,11 +240,12 @@ class RBMK:
 		pickle.dump(self.screen, open(self.screenObject,'wb'))		
 
 if __name__ == '__main__':
-	userRBMK = RBMK('../data/Config.ini', 'UserRBMK')
+	dir_path = os.path.dirname(os.path.realpath(__file__))
+	userRBMK = RBMK(dir_path+'../data/Config.ini', 'UserRBMK')
 
 	countExclude = 0
 	print('Read Data')
-	filePointer = open('../data/MovieUserInfo.dat')
+	filePointer = open(dir_path+'../data/MovieUserInfo.dat')
 	iterLines = iter(filePointer)
 	dataID = []
 	data = [[] for x in range(userRBMK.k)]
@@ -298,7 +299,7 @@ if __name__ == '__main__':
 
 	# Sort and make to correct structure
 	print('Ranking with specific rating')
-	f = open('../data/MovieUserInfoOut.dat','w')
+	f = open(dir_path+'../data/MovieUserInfoOut.dat','w')
 	outputArray = {'key':'value'}
 	output = np.array(output)
 	for i in range(output.shape[0]):
