@@ -10,7 +10,7 @@ import time
 import random
 import pickle
 import ConfigParser
-import os
+from numba import vectorize, cuda
 
 class RBMK:
 	def __init__(self, configFile, typeRBM):
@@ -30,25 +30,25 @@ class RBMK:
 		self.numpyRng = np.random.RandomState(random.randrange(0, 100))
 
 		# Initial with zero mean and 0.01 std
-		# try:
-		# 	self.weights = pickle.load(open(self.weightsObject, 'rb' ))
-		# except:
-		self.weights = np.asarray(self.numpyRng.normal(0, 0.01, size=(self.k, self.numVisible, self.numHidden)), dtype=np.float32)
+		try:
+			self.weights = pickle.load(open(self.weightsObject, 'rb' ))
+		except:
+			self.weights = np.asarray(self.numpyRng.normal(0, 0.01, size=(self.k, self.numVisible, self.numHidden)), dtype=np.float32)
 
 		# Inital hidden Bias
-		# try:
-		# 	self.hBias = pickle.load(open(self.hBiasObject, 'rb' ))
-		# except:
-		self.hBias = np.zeros(self.numHidden, dtype=np.float32)
+		try:
+			self.hBias = pickle.load(open(self.hBiasObject, 'rb' ))
+		except:
+			self.hBias = np.zeros(self.numHidden, dtype=np.float32)
 
 		# Inital visible Bias
 		self.vBias = np.zeros((self.k, self.numVisible), dtype=np.float32)
 
 		# Initial Screen
-		# try:
-		# 	self.screen = pickle.load(open(self.screenObject, 'rb' ))
-		# except:
-		self.screen = [1] * self.numVisible
+		try:
+			self.screen = pickle.load(open(self.screenObject, 'rb' ))
+		except:
+			self.screen = [1] * self.numVisible
 
 		self.exclude = None
 
@@ -115,9 +115,6 @@ class RBMK:
 		hiddenStates = hiddenProbs > np.random.rand(len(visible[0]), self.numHidden)
 
 		np.set_printoptions(threshold=np.nan)
-		# print(self.weights)
-		# print(self.hBias)
-		# print(hiddenStates)
 
 		return hiddenStates
 
@@ -175,7 +172,7 @@ class RBMK:
 		step = 1
 		learningRate = self.startLearningRate
 		# Loop for how many iterations
-		for epoch in range (self.maxEpochs): 
+		for epoch in range (self.maxEpochs):
 			if (epoch != 0 and epoch%10 == 0):
 				step += 2
 
@@ -230,47 +227,47 @@ class RBMK:
 			# print ('{0:7}Epoch : {1} Time : {2}'.format('INFO', epoch, totalTime))
 			print ('{0:7}Epoch : {1} Train RMSE : {2} Time : {3}'.format('INFO', epoch, rmseRrror, totalTime))
 
-			# if epoch > 3000:
-			# raw_input()
-
 		# Save weights
 		pickle.dump(self.weights, open(self.weightsObject,'wb'))
 		pickle.dump(self.hBias, open(self.hBiasObject,'wb'))
 		pickle.dump(self.vBias, open(self.vBiasObject,'wb'))
-		pickle.dump(self.screen, open(self.screenObject,'wb'))		
+		pickle.dump(self.screen, open(self.screenObject,'wb'))
 
 if __name__ == '__main__':
-	dir_path = os.path.dirname(os.path.realpath(__file__))
-	userRBMK = RBMK(dir_path+'../data/Config.ini', 'UserRBMK')
+	userRBMK = RBMK('../data/Config.ini', 'DocRBMK')
 
-	countExclude = 0
 	print('Read Data')
-	filePointer = open(dir_path+'../data/MovieUserInfo.dat')
+	filePointer = open('../data/DocInfo.dat')
 	iterLines = iter(filePointer)
+	rateEx = []
+	idEx = []
 	dataID = []
 	data = [[] for x in range(userRBMK.k)]
+	dataTest = [[] for x in range(userRBMK.k)]
 	for lineNum, line in enumerate(iterLines):
 		tmp = [ [0 for i in range(userRBMK.numVisible) ] for j in range(userRBMK.k) ]
 		ID = line.split('::')[0]
 		line = line.split('::')[1:]
-		exID = np.random.randint(len(line)/4)
+		exID = np.random.randint(len(line))
 		for offset, ele in enumerate(line):
-			try:
-				idTmp = ele.split(',')[0]
-				rate = ele.split(',')[1]
-				tmp[int(float(rate))][int(idTmp)] = int(1)
-				if offset == exID:
-					print('Ex {0} {1}'.format(lineNum,offset))
-					tmp[int(float(rate))][int(idTmp)] = int(0)
-					countExclude += 1
-			except:
-				exID += 1
-				tmpFalse = None
+			idTmp = ele.split(',')[0]
+			rate = ele.split(',')[1]
+			tmp[int(float(rate)-1)][int(idTmp)] = int(1)
+			if offset == exID:
+				print('Ex {0} {1}'.format(lineNum,offset))
+				rateEx.append(int(float(rate)-1))
+				idEx.append(int(idTmp))
+				tmp[int(float(rate)-1)][int(idTmp)] = int(0)
 		for i in range(userRBMK.k):
-			data[i].append(tmp[i])
+			if lineNum < 5000:
+				data[i].append(tmp[i])
+			else:
+				dataTest[i].append(tmp[i])
 		dataID.append(ID)
 	data = np.array(data)
-	print(countExclude)
+	dataTest = np.array(dataTest)
+	print (data.shape)
+	print (dataTest.shape)
 
 	# Train
 	print('Training')
@@ -280,11 +277,22 @@ if __name__ == '__main__':
 
 	# Calculate all output
 	print('Recall')
-	tmpHidden = userRBMK.getHidden(data)
+	tmpHidden = userRBMK.getHidden(dataTest)
 	tmpVisible = userRBMK.getVisible(tmpHidden)
 	tmpVisible = np.array(tmpVisible)
 
-	# Calculate Output to select right pos for each visble unit
+	# totalError = 0
+	# sumValue = 0
+	# for eachUser in range(tmpVisible.shape[1]):
+	# 	if tmpVisible[rateEx[eachUser]][eachUser][idEx[eachUser]] < 0.5:
+	# 		totalError += 1
+	# 	sumValue += (tmpVisible[rateEx[eachUser]][eachUser][idEx[eachUser]]-1)**2
+	# print(totalError)
+	# print('Accuracy = {0}%'.format((1-(float(totalError)/float(dataTest.shape[1])))*100))
+	# rmsError = math.sqrt(sumValue/float(tmpVisible.shape[1]))
+	# print('RMSE = {0}'.format(rmsError))
+
+	# Calculate Output to select right pos for each visible unit
 	print('Calculate output')
 	output = [[None for i in range(tmpVisible.shape[2])] for j in range(tmpVisible.shape[1])]
 	for userID in range(tmpVisible.shape[1]):
@@ -297,28 +305,45 @@ if __name__ == '__main__':
 					maxPos = dim
 			output[userID][docID] = dict({'doc':docID, 'pos':maxPos, 'value':maxValue})
 
-	# Sort and make to correct structure
-	print('Ranking with specific rating')
-	f = open(dir_path+'../data/MovieUserInfoOut.dat','w')
-	outputArray = {'key':'value'}
-	output = np.array(output)
-	for i in range(output.shape[0]):
-		maxTop = 100
-		countTop = 0
-		tmpValue = ''
-		# posPoint = 1
-		# tmpList = sorted([x for x in output[i] if x['pos']==posPoint], key=lambda k:k['value'], reverse=True)
-		tmpList = sorted([x for x in output[i]], key=lambda k:k['value'], reverse=True)
-		for j in range(len(tmpList)):
-			if userRBMK.exclude[i][int(tmpList[j]['doc'])] == 0:
-				if countTop != 0:
-					tmpValue += '::'
-				tmpValue += str(tmpList[j]['doc'])
-				countTop = countTop + 1
-				if countTop == maxTop:
-					break
-		outputArray[dataID[i]] = tmpValue
-		f.write('{0}::{1}\n'.format(dataID[i],tmpValue))
+	totalError = 0
+	sumValue = 0
+	for eachUser in range(tmpVisible.shape[1]):
+		check1 = 0
+		check2 = 0
+		if output[eachUser][idEx[eachUser]]['pos'] > 3:
+			check1 = 1
+		if rateEx[eachUser] > 3:
+			check2 = 1
+		if check1 != check2:
+			totalError += 1
+		sumValue += (tmpVisible[rateEx[eachUser]][eachUser][idEx[eachUser]]-1)**2
+	print(totalError)
+	print('Accuracy = {0}%'.format((1-(float(totalError)/float(dataTest.shape[1])))*100))
+	rmsError = math.sqrt(sumValue/float(tmpVisible.shape[1]))
+	print('RMSE = {0}'.format(rmsError))
+
+	# # Sort and make to correct structure
+	# print('Ranking with specific rating')
+	# f = open('../data/MovieUserInfoOut.dat','w')
+	# outputArray = {'key':'value'}
+	# output = np.array(output)
+	# for i in range(output.shape[0]):
+	# 	maxTop = 100
+	# 	countTop = 0
+	# 	tmpValue = ''
+	# 	# posPoint = 1
+	# 	# tmpList = sorted([x for x in output[i] if x['pos']==posPoint], key=lambda k:k['value'], reverse=True)
+	# 	tmpList = sorted([x for x in output[i]], key=lambda k:k['value'], reverse=True)
+	# 	for j in range(len(tmpList)):
+	# 		if userRBMK.exclude[i][int(tmpList[j]['doc'])] == 0:
+	# 			if countTop != 0:
+	# 				tmpValue += '::'
+	# 			tmpValue += str(tmpList[j]['doc'])
+	# 			countTop = countTop + 1
+	# 			if countTop == maxTop:
+	# 				break
+	# 	outputArray[dataID[i]] = tmpValue
+	# 	f.write('{0}::{1}\n'.format(dataID[i],tmpValue))
 
 	# pickle.dump(outputArray, open('../data/tmpOutput.object','wb'))
 	print('Done')
