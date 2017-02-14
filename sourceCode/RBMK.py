@@ -221,6 +221,10 @@ class RBMK:
 			# Check error for each epoch
 			tmpHidden = self.getHidden(data)
 			tmpVisible = self.getVisible(tmpHidden)
+
+			rmseRrror = math.sqrt(np.sum((data - tmpVisible) ** 2) / (data.shape[0]*data.shape[1]*data.shape[2]))
+			print ('RMSE : {0}'.format(rmseRrror))
+
 			tmpVisible = tmpVisible * data
 			rmseRrror = math.sqrt(np.sum((data-tmpVisible)**2)/np.sum(data == 1))
 			totalTime = time.time()-startTime
@@ -234,10 +238,13 @@ class RBMK:
 		pickle.dump(self.screen, open(self.screenObject,'wb'))
 
 if __name__ == '__main__':
-	userRBMK = RBMK('../data/Config.ini', 'DocRBMK')
+	threshold = 3
+	userRBMK = RBMK('../data/Config.ini', 'UserRBMK')
 
+	countEX = 0
+	# Read Data
 	print('Read Data')
-	filePointer = open('../data/DocInfo.dat')
+	filePointer = open('../data/MovieUserInfo.dat')
 	iterLines = iter(filePointer)
 	rateEx = []
 	idEx = []
@@ -252,14 +259,20 @@ if __name__ == '__main__':
 		for offset, ele in enumerate(line):
 			idTmp = ele.split(',')[0]
 			rate = ele.split(',')[1]
-			tmp[int(float(rate)-1)][int(idTmp)] = int(1)
-			if offset == exID:
-				print('Ex {0} {1}'.format(lineNum,offset))
-				rateEx.append(int(float(rate)-1))
-				idEx.append(int(idTmp))
-				tmp[int(float(rate)-1)][int(idTmp)] = int(0)
+			if int(idTmp) < 10000:
+				tmp[int(float(rate)-1)][int(idTmp)] = int(1)
+				if offset == exID:
+					if int(float(rate)-1) >= threshold:
+						print('Ex {0} {1}'.format(lineNum,offset))
+						rateEx.append(int(float(rate)-1))
+						idEx.append(int(idTmp))
+						tmp[int(float(rate)-1)][int(idTmp)] = int(0)
+						if lineNum >= 500:
+							countEX += 1
+					else:
+						exID += 1
 		for i in range(userRBMK.k):
-			if lineNum < 5000:
+			if lineNum < 500:
 				data[i].append(tmp[i])
 			else:
 				dataTest[i].append(tmp[i])
@@ -268,6 +281,7 @@ if __name__ == '__main__':
 	dataTest = np.array(dataTest)
 	print (data.shape)
 	print (dataTest.shape)
+	print (countEX)
 
 	# Train
 	print('Training')
@@ -281,17 +295,8 @@ if __name__ == '__main__':
 	tmpVisible = userRBMK.getVisible(tmpHidden)
 	tmpVisible = np.array(tmpVisible)
 
-	# totalError = 0
-	# sumValue = 0
-	# for eachUser in range(tmpVisible.shape[1]):
-	# 	if tmpVisible[rateEx[eachUser]][eachUser][idEx[eachUser]] < 0.5:
-	# 		totalError += 1
-	# 	sumValue += (tmpVisible[rateEx[eachUser]][eachUser][idEx[eachUser]]-1)**2
-	# print(totalError)
-	# print('Accuracy = {0}%'.format((1-(float(totalError)/float(dataTest.shape[1])))*100))
-	# rmsError = math.sqrt(sumValue/float(tmpVisible.shape[1]))
-	# print('RMSE = {0}'.format(rmsError))
-
+	############################################################
+	# Change value to 1 and 0 evaluation
 	# Calculate Output to select right pos for each visible unit
 	print('Calculate output')
 	output = [[None for i in range(tmpVisible.shape[2])] for j in range(tmpVisible.shape[1])]
@@ -304,35 +309,54 @@ if __name__ == '__main__':
 					maxValue = tmpVisible[dim][userID][docID]
 					maxPos = dim
 			output[userID][docID] = dict({'doc':docID, 'pos':maxPos, 'value':maxValue})
-
 	totalError = 0
 	sumValue = 0
+	countCheck = 0
+	countCheck1 = 0
 	for eachUser in range(tmpVisible.shape[1]):
 		check1 = 0
 		check2 = 0
-		if output[eachUser][idEx[eachUser]]['pos'] > 3:
+		if output[eachUser][idEx[eachUser]]['pos'] >= threshold:
 			check1 = 1
-		if rateEx[eachUser] > 3:
+			countCheck1 += 1
+		if rateEx[eachUser] >= threshold:
 			check2 = 1
+			countCheck += 1
 		if check1 != check2:
 			totalError += 1
-		sumValue += (tmpVisible[rateEx[eachUser]][eachUser][idEx[eachUser]]-1)**2
-	print(totalError)
 	print('Accuracy = {0}%'.format((1-(float(totalError)/float(dataTest.shape[1])))*100))
-	rmsError = math.sqrt(sumValue/float(tmpVisible.shape[1]))
-	print('RMSE = {0}'.format(rmsError))
+	tmpVisible = tmpVisible * dataTest
+	rmseError = math.sqrt(np.sum((dataTest - tmpVisible) ** 2) / np.sum(dataTest == 1))
+	print ('Testing RMSE : {0}'.format(rmseError))
+	print(countCheck)
+	print(countCheck1)
 
-	# # Sort and make to correct structure
-	# print('Ranking with specific rating')
-	# f = open('../data/MovieUserInfoOut.dat','w')
+	# # MAP Evaluation
+	# print('MAP Evaulation')
+	# filePointer = open('../data/MovieKMeansCat20.dat')
+	# iterLines = iter(filePointer)
+	# catDict = {'key': 'value'}
+	# for lineNum, line in enumerate(iterLines):
+	# 	line = line.rstrip()
+	# 	catDict[line.split('::')[0]] = line.split('::')[1]
+    #
+	# output = [[None for i in range(tmpVisible.shape[2])] for j in range(tmpVisible.shape[1])]
+	# for userID in range(tmpVisible.shape[1]):
+	# 	for docID in range(tmpVisible.shape[2]):
+	# 		maxValue = tmpVisible[0][userID][docID]
+	# 		maxPos = 0
+	# 		for dim in range(1,userRBMK.k):
+	# 			if (tmpVisible[dim][userID][docID] > tmpVisible[dim-1][userID][docID]):
+	# 				maxValue = tmpVisible[dim][userID][docID]
+	# 				maxPos = dim
+	# 		output[userID][docID] = dict({'doc':docID, 'pos':maxPos, 'value':maxValue})
+    #
 	# outputArray = {'key':'value'}
 	# output = np.array(output)
 	# for i in range(output.shape[0]):
-	# 	maxTop = 100
+	# 	maxTop = 5
 	# 	countTop = 0
 	# 	tmpValue = ''
-	# 	# posPoint = 1
-	# 	# tmpList = sorted([x for x in output[i] if x['pos']==posPoint], key=lambda k:k['value'], reverse=True)
 	# 	tmpList = sorted([x for x in output[i]], key=lambda k:k['value'], reverse=True)
 	# 	for j in range(len(tmpList)):
 	# 		if userRBMK.exclude[i][int(tmpList[j]['doc'])] == 0:
@@ -343,7 +367,56 @@ if __name__ == '__main__':
 	# 			if countTop == maxTop:
 	# 				break
 	# 	outputArray[dataID[i]] = tmpValue
-	# 	f.write('{0}::{1}\n'.format(dataID[i],tmpValue))
+	# print(outputArray)
+
+	# tmpVisible = tmpVisible * dataTest
+	# rmseError = math.sqrt(np.sum((dataTest - tmpVisible) ** 2) / np.sum(dataTest == 1))
+	# print ('Testing RMSE : {0}'.format(rmseError))
+    #
+
+	# Calculate all output
+	print('Recall')
+	tmpHidden = userRBMK.getHidden(dataTest)
+	tmpVisible = userRBMK.getVisible(tmpHidden)
+	tmpVisible = np.array(tmpVisible)
+	############################################################
+	# Change value to 1 and 0 evaluation
+	# Calculate Output to select right pos for each visible unit
+	print('Calculate output')
+	output = [[None for i in range(tmpVisible.shape[2])] for j in range(tmpVisible.shape[1])]
+	for userID in range(tmpVisible.shape[1]):
+		for docID in range(tmpVisible.shape[2]):
+			maxValue = tmpVisible[0][userID][docID]
+			maxPos = 0
+			for dim in range(1,userRBMK.k):
+				if (tmpVisible[dim][userID][docID] > tmpVisible[dim-1][userID][docID]):
+					maxValue = tmpVisible[dim][userID][docID]
+					maxPos = dim
+			output[userID][docID] = dict({'doc':docID, 'pos':maxPos, 'value':maxValue})
+	# Sort and make to correct structure
+	print('Ranking with specific rating')
+	f = open('../data/MovieUserInfoOut.dat','w')
+	outputArray = {'key':'value'}
+	output = np.array(output)
+	for i in range(output.shape[0]):
+		maxTop = 100
+		countTop = 0
+		tmpValue = ''
+		# posPoint = 1
+		# tmpList = sorted([x for x in output[i] if x['pos']==posPoint], key=lambda k:k['value'], reverse=True)
+		tmpList = sorted([x for x in output[i] if int(x['pos']) >= threshold], key=lambda k:k['value'], reverse=True)
+		print(output[i][idEx[i]]['pos'])
+		for j in range(len(tmpList)):
+			print ('{0} {1} {2}'.format(i, tmpList[j]['doc'], np.sum(dataTest[:, i, int(tmpList[j]['doc'])])))
+			if np.sum(dataTest[:, i, int(tmpList[j]['doc'])]) == 0:
+				if countTop != 0:
+					tmpValue += '::'
+				tmpValue += str(tmpList[j]['doc'])
+				countTop = countTop + 1
+				if countTop == maxTop:
+					break
+		outputArray[dataID[i]] = tmpValue
+		f.write('{0}::{1}\n'.format(int(dataID[i])+500,tmpValue))
 
 	# pickle.dump(outputArray, open('../data/tmpOutput.object','wb'))
 	print('Done')

@@ -21,28 +21,23 @@ for lineNumber, line in enumerate(iterlines):
 	for data in line:
 		if userID not in dataDict:
 			dataDict[userID] = []
-		dataDict[userID].append(int(data.split(',')[0]))
+		if int(data.split(',')[0]) >= 3:
+			dataDict[userID].append(int(data.split(',')[0]))
 input1.close()
 
 count = 0
 matchID = 0
 iterlines = iter(input2)
 for lineNumber, line in enumerate(iterlines):
+	line = line.rstrip()
 	userID = line.split('::')[0]
-	line = line.split('::')[0:50]
-	for match in line:
-		try:
+	line = line.split('::')[1:50]
+	if line[0] != '':
+		for match in line:
 			if int(match) in dataDict[userID]:
-				count = count + 1
-				break
-		except:
-			print('Except')
-			count = count
-			matchID = matchID - 1
-	matchID = matchID + 1
+				count += 1
 input2.close()
-
-print(float(count)/float(matchID)*100)
+print((float(count)/float(150))*100)
 
 
 
