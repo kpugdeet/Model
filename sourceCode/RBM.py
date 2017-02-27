@@ -10,7 +10,6 @@ import time
 import random
 import pickle
 import ConfigParser
-from numba import vectorize, cuda
 
 class RBM:
 	def __init__(self, configFile, typeRBM):
@@ -89,7 +88,7 @@ class RBM:
 		return visibleProbs
 
 	# Train RMB model
-	def train (self, data, test):
+	def train (self, data):
 		# Screen some visible that always 0
 		self.screen = [1] * self.numVisible
 		for column in range(data.shape[1]):
@@ -150,12 +149,7 @@ class RBM:
 			rmseError = math.sqrt(np.sum((data-tmpVisible)**2)/np.sum(data == 1))
 			totalTime = time.time()-startTime
 
-			tmpHidden1 = self.getHidden(test)
-			tmpVisible1 = self.getVisible(tmpHidden1)
-			tmpVisible1 = tmpVisible1 * test
-			rmseError1 = math.sqrt(np.sum((test-tmpVisible1)**2)/np.sum(test == 1))
-
-			print ('{0:7}Epoch : {1:5}  Time : {2:15} Train RMSE : {3:10}{4}'.format('INFO', epoch, totalTime, rmseError, rmseError1))
+			print ('{0:7}Epoch : {1:5}  Time : {2:15} Train RMSE : {3:10}'.format('INFO', epoch, totalTime, rmseError))
 
 		# Save weights
 		print ('{0:7}TotalTime : {1}'.format('INFO', time.time()-start))
@@ -165,68 +159,133 @@ class RBM:
 		pickle.dump(self.screen, open(self.screenObject,'wb'))	
 
 if __name__ == '__main__':
-	userRbm = RBM ('../data/Config.ini', 'UserRBM')
-	filePointer = open('../data/DocumentInfo.dat')
-	iterLines = iter(filePointer)
+	# userRbm = RBM ('../data/Config.ini', 'UserRBM')
+	# filePointer = open('../data/DocumentInfo.dat')
+	# iterLines = iter(filePointer)
+    #
+	# # Read Data
+	# print('Loading')
+	# dataID = []
+	# data = []
+	# for lineNum, line in enumerate(iterLines):
+	# 	tmp = [0] * userRbm.numVisible
+	# 	ID = line.split('::')
+	# 	line = line.split('::')[1:]
+	# 	for doc in line:
+	# 		try:
+	# 			tmp[int(doc)] = int(1)
+	# 		except:
+	# 			tmpFalse = None
+	# 	data.append(tmp)
+	# 	dataID.append(ID[0])
+	# data = np.array(data)
+    #
+	# # data = np.array([[1,1,1,0,0,0],[1,0,1,0,0,0],[1,1,1,0,0,0],[0,0,1,1,1,0], [0,0,1,1,0,0],[0,0,1,1,1,0]])
+	# # dataID = np.array([0,1,2,3,4,5])
+    #
+	# # Divide testing and training data
+	# print('Training')
+	# trainPart = 0.8
+	# trainSize = int(trainPart * len(data))
+	# train = np.array(data[:trainSize])
+	# test = np.array(data[trainSize:])
+	# userRbm.train(train, test)
+    #
+	# # Calculate all output
+	# print('Recalling')
+	# tmpHidden = userRbm.getHidden(data)
+	# tmpVisible = userRbm.getVisible(tmpHidden)
+	# # np.set_printoptions(threshold=np.nan)
+	# # print(tmpHidden)
+    #
+	# print('Calculating')
+	# f = open('../data/tmpOutputTableau.txt','w')
+	# f2 = open('../data/tmpOutput.txt','w')
+	# outputArray = {'key':'value'}
+	# for i in range(tmpVisible.shape[0]):
+	# 	maxTop = 10
+	# 	countTop = 0
+	# 	tmpValue = ''
+	# 	tmpList = sorted(range(len(tmpVisible[i])), key=lambda k: tmpVisible[i][k], reverse=True)
+	# 	for j in range(tmpVisible.shape[1]):
+	# 		if data[i][tmpList[j]] == 0:
+	# 			if countTop > -1:
+	# 				tmpValue += str(tmpList[j])
+	# 				f.write('{0},{1},2\n'.format(dataID[i],tmpList[j]))
+	# 				if (countTop < maxTop-1):
+	# 					tmpValue += '::'
+	# 			countTop = countTop + 1
+	# 			if countTop == maxTop:
+	# 				break
+	# 	outputArray[dataID[i]] = tmpValue
+	# 	f2.write('{0} {1}\n'.format(dataID[i],tmpValue))
+	threshold = 0
+	userRBM = RBM('../data/Config.ini', 'UserRBMKCiteU')
 
+	countEX = 0
 	# Read Data
-	print('Loading')
+	print('Read Data')
+	filePointer = open('../data/UserInfo.dat')
+	iterLines = iter(filePointer)
+	rateEx = []
+	idEx = []
 	dataID = []
 	data = []
+	dataTest = []
 	for lineNum, line in enumerate(iterLines):
-		tmp = [0] * userRbm.numVisible
-		ID = line.split('::')
+		tmp = [0] * userRBM.numVisible
+		ID = line.split('::')[0]
 		line = line.split('::')[1:]
-		for doc in line:
-			try:
-				tmp[int(doc)] = int(1)
-			except:
-				tmpFalse = None
-		data.append(tmp)
-		dataID.append(ID[0])
+		exID = np.random.randint(len(line))
+		for offset, ele in enumerate(line):
+			idTmp = ele
+			if int(idTmp) < 16980:
+				tmp[int(idTmp)] = int(1)
+				if offset == exID:
+					if int(0) >= threshold:
+						print('Ex {0} {1}'.format(lineNum, offset))
+						rateEx.append(0)
+						idEx.append(int(idTmp))
+						tmp[int(idTmp)] = int(0)
+						if lineNum >= 4000:
+							countEX += 1
+					else:
+						exID += 1
+		if lineNum < 4000:
+			data.append(tmp)
+		else:
+			dataTest.append(tmp)
+		dataID.append(ID)
 	data = np.array(data)
+	dataTest = np.array(dataTest)
+	print (data.shape)
+	print (dataTest.shape)
+	print (countEX)
 
-	# data = np.array([[1,1,1,0,0,0],[1,0,1,0,0,0],[1,1,1,0,0,0],[0,0,1,1,1,0], [0,0,1,1,0,0],[0,0,1,1,1,0]])
-	# dataID = np.array([0,1,2,3,4,5])
-
-	# Divide testing and training data
+	# Train
 	print('Training')
-	trainPart = 0.8
-	trainSize = int(trainPart * len(data))
-	train = np.array(data[:trainSize])
-	test = np.array(data[trainSize:])
-	userRbm.train(train, test)
+	a = time.time()
+	userRBM.train(data)
+	print('Time = {0}'.format(time.time() - a))
 
 	# Calculate all output
-	print('Recalling')
-	tmpHidden = userRbm.getHidden(data)
-	tmpVisible = userRbm.getVisible(tmpHidden)
-	# np.set_printoptions(threshold=np.nan)
-	# print(tmpHidden)
+	print('Recall')
+	tmpHidden = userRBM.getHidden(dataTest)
+	tmpVisible = userRBM.getVisible(tmpHidden)
+	tmpVisible = np.array(tmpVisible)
 
-	print('Calculating')
-	f = open('../data/tmpOutputTableau.txt','w')
-	f2 = open('../data/tmpOutput.txt','w')
-	outputArray = {'key':'value'}
-	for i in range(tmpVisible.shape[0]):
-		maxTop = 10
-		countTop = 0
-		tmpValue = ''
-		tmpList = sorted(range(len(tmpVisible[i])), key=lambda k: tmpVisible[i][k], reverse=True)
-		for j in range(tmpVisible.shape[1]):
-			if data[i][tmpList[j]] == 0:
-				if countTop > -1:
-					tmpValue += str(tmpList[j])
-					f.write('{0},{1},2\n'.format(dataID[i],tmpList[j]))
-					if (countTop < maxTop-1):
-						tmpValue += '::'
-				countTop = countTop + 1
-				if countTop == maxTop:
-					break
-		outputArray[dataID[i]] = tmpValue
-		f2.write('{0} {1}\n'.format(dataID[i],tmpValue))
+	countCheck = 0
+	for eachUser in range(tmpVisible.shape[0]):
+		tmpVisibleStates = tmpVisible > np.random.rand(tmpVisible.shape[0], tmpVisible.shape[1])
+		if tmpVisible[eachUser][idEx[eachUser]] > 0:
+			countCheck += 1
 
-	pickle.dump(outputArray, open('../data/tmpOutput.object','wb'))
+	print('Accuracy = {0}%'.format((countCheck / float(dataTest.shape[0])) * 100))
+	tmpVisible *= dataTest
+	rmseError = math.sqrt(np.sum((dataTest - tmpVisible) ** 2) / np.sum(dataTest == 1))
+	print ('Testing RMSE : {0}'.format(rmseError))
+
+	# pickle.dump(outputArray, open('../data/tmpOutput.object','wb'))
 	print('Done')
 
 
